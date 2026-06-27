@@ -1,0 +1,308 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>LAN File Transfer</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <!-- ═══ ANIMATED BACKGROUND ═══ -->
+      <div class="bg-glow bg-glow-1"></div>
+      <div class="bg-glow bg-glow-2"></div>
+
+      <!-- ═══ HOME SCREEN ═══ -->
+      <div id="screen-home" class="screen active">
+        <div class="hero">
+          <div class="logo-ring">
+            <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="url(#grad)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <defs>
+                <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" style="stop-color:#6C63FF" />
+                  <stop offset="100%" style="stop-color:#00C896" />
+                </linearGradient>
+              </defs>
+              <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
+            </svg>
+          </div>
+          <h1>LAN Transfer</h1>
+          <p class="tagline">Peer-to-peer file sharing on your local network.<br/>No internet. No cloud. No limits.</p>
+        </div>
+
+        <div class="action-cards">
+          <button class="action-card action-send" id="btn-go-send">
+            <div class="action-icon">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="22" y1="2" x2="11" y2="13" />
+                <polygon points="22 2 15 22 11 13 2 9 22 2" />
+              </svg>
+            </div>
+            <div class="action-text">
+              <span class="action-title">Send File</span>
+              <span class="action-desc">Share a file with others on this network</span>
+            </div>
+            <svg class="action-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6" /></svg>
+          </button>
+
+          <button class="action-card action-receive" id="btn-go-receive">
+            <div class="action-icon">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="7 10 12 15 17 10" />
+                <line x1="12" y1="15" x2="12" y2="3" />
+              </svg>
+            </div>
+            <div class="action-text">
+              <span class="action-title">Receive File</span>
+              <span class="action-desc">Download a file using a room code</span>
+            </div>
+            <svg class="action-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6" /></svg>
+          </button>
+        </div>
+
+        <p class="version">v1.0.0</p>
+      </div>
+
+      <!-- ═══ SEND SCREEN ═══ -->
+      <div id="screen-send" class="screen">
+        <button class="back-btn" id="back-from-send">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6" /></svg>
+          Back
+        </button>
+
+        <div class="screen-header">
+          <h2>Send File</h2>
+          <div class="connection-dot" id="send-conn-dot" title="Disconnected"></div>
+        </div>
+
+        <!-- Step 1: File Selection -->
+        <div id="send-step-file">
+          <div class="file-drop-zone" id="drop-zone">
+            <div class="drop-icon">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                <polyline points="14 2 14 8 20 8" />
+                <line x1="12" y1="18" x2="12" y2="12" />
+                <polyline points="9 15 12 12 15 15" />
+              </svg>
+            </div>
+            <span class="drop-text" id="drop-label">Click or drag a file here</span>
+            <span class="drop-hint">Any file type, any size</span>
+            <input type="file" id="file-input" hidden />
+          </div>
+
+          <div id="file-info" class="file-info hidden">
+            <div class="file-info-icon">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            </div>
+            <div class="file-info-details">
+              <span class="file-info-name" id="file-name">—</span>
+              <span class="file-info-size" id="file-size">—</span>
+            </div>
+            <button class="file-info-remove" id="file-remove" title="Remove file">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          </div>
+
+          <button class="btn btn-primary" id="btn-create-room" disabled>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+            Generate Room Code
+          </button>
+        </div>
+
+        <!-- Step 2: Waiting / Transferring -->
+        <div id="send-step-waiting" class="hidden">
+          <div class="room-card">
+            <div class="room-card-header">
+              <span class="room-label">Room Code</span>
+              <button class="btn-icon" id="copy-code" title="Copy code">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              </button>
+            </div>
+            <div class="room-code" id="room-code">------</div>
+          </div>
+
+          <div class="ip-card">
+            <span class="ip-label">Your Network IP</span>
+            <span class="ip-value" id="server-ip">—</span>
+            <span class="ip-hint">Share this IP + code with the receiver</span>
+          </div>
+
+          <div id="send-status" class="status-badge status-info">
+            <div class="status-pulse"></div>
+            <span>Waiting for receiver to connect...</span>
+          </div>
+
+          <div id="send-transfer-info" class="transfer-info hidden">
+            <div class="progress-ring-wrap">
+              <svg class="progress-ring" width="80" height="80" viewBox="0 0 80 80">
+                <circle class="progress-ring-bg" cx="40" cy="40" r="34" />
+                <circle class="progress-ring-fill" id="send-progress-ring" cx="40" cy="40" r="34" />
+              </svg>
+              <span class="progress-ring-text" id="send-pct">0%</span>
+            </div>
+            <div class="transfer-stats">
+              <div class="stat">
+                <span class="stat-label">Speed</span>
+                <span class="stat-value" id="send-speed">—</span>
+              </div>
+              <div class="stat">
+                <span class="stat-label">ETA</span>
+                <span class="stat-value" id="send-eta">—</span>
+              </div>
+              <div class="stat">
+                <span class="stat-label">Sent</span>
+                <span class="stat-value" id="send-sent">—</span>
+              </div>
+            </div>
+          </div>
+
+          <button class="btn btn-danger" id="btn-cancel-send">
+            Cancel
+          </button>
+        </div>
+
+        <!-- Step 3: Complete -->
+        <div id="send-step-done" class="hidden">
+          <div class="done-card">
+            <div class="done-icon">
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#00C896" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                <polyline points="22 4 12 14.01 9 11.01" />
+              </svg>
+            </div>
+            <h3>Transfer Complete!</h3>
+            <p id="done-send-details">—</p>
+            <button class="btn btn-primary" id="btn-send-another">Send Another File</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══ RECEIVE SCREEN ═══ -->
+      <div id="screen-receive" class="screen">
+        <button class="back-btn" id="back-from-receive">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6" /></svg>
+          Back
+        </button>
+
+        <div class="screen-header">
+          <h2>Receive File</h2>
+          <div class="connection-dot" id="recv-conn-dot" title="Disconnected"></div>
+        </div>
+
+        <!-- Step 1: Enter details -->
+        <div id="recv-step-join">
+          <div class="input-group">
+            <label for="sender-ip">Sender's IP Address</label>
+            <div class="input-wrap">
+              <svg class="input-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+              <input type="text" id="sender-ip" placeholder="e.g. 192.168.1.5" class="input-field" autocomplete="off" spellcheck="false" />
+            </div>
+          </div>
+
+          <div class="input-group">
+            <label for="code-input">Room Code</label>
+            <div class="input-wrap">
+              <svg class="input-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+              <input type="text" id="code-input" placeholder="e.g. 6XJKL9" class="input-field code-input-field" maxlength="6" autocomplete="off" spellcheck="false" />
+            </div>
+          </div>
+
+          <button class="btn btn-accent" id="btn-join-room">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
+            Connect &amp; Receive
+          </button>
+        </div>
+
+        <!-- Step 2: Transferring -->
+        <div id="recv-step-transfer" class="hidden">
+          <div id="recv-status" class="status-badge status-info">
+            <div class="status-pulse"></div>
+            <span>Connecting...</span>
+          </div>
+
+          <div id="recv-file-info" class="file-info hidden">
+            <div class="file-info-icon">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            </div>
+            <div class="file-info-details">
+              <span class="file-info-name" id="recv-file-name">—</span>
+              <span class="file-info-size" id="recv-file-size">—</span>
+            </div>
+          </div>
+
+          <div id="recv-transfer-info" class="transfer-info hidden">
+            <div class="progress-ring-wrap">
+              <svg class="progress-ring" width="80" height="80" viewBox="0 0 80 80">
+                <circle class="progress-ring-bg" cx="40" cy="40" r="34" />
+                <circle class="progress-ring-fill" id="recv-progress-ring" cx="40" cy="40" r="34" />
+              </svg>
+              <span class="progress-ring-text" id="recv-pct">0%</span>
+            </div>
+            <div class="transfer-stats">
+              <div class="stat">
+                <span class="stat-label">Speed</span>
+                <span class="stat-value" id="recv-speed">—</span>
+              </div>
+              <div class="stat">
+                <span class="stat-label">ETA</span>
+                <span class="stat-value" id="recv-eta">—</span>
+              </div>
+              <div class="stat">
+                <span class="stat-label">Received</span>
+                <span class="stat-value" id="recv-received">—</span>
+              </div>
+            </div>
+          </div>
+
+          <button class="btn btn-danger" id="btn-cancel-recv">
+            Cancel
+          </button>
+        </div>
+
+        <!-- Step 3: Complete -->
+        <div id="recv-step-done" class="hidden">
+          <div class="done-card">
+            <div class="done-icon">
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#00C896" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                <polyline points="22 4 12 14.01 9 11.01" />
+              </svg>
+            </div>
+            <h3>Download Complete!</h3>
+            <p id="done-recv-details">—</p>
+            <button class="btn btn-accent" id="btn-receive-another">Receive Another File</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══ ERROR OVERLAY ═══ -->
+      <div id="error-overlay" class="error-overlay hidden">
+        <div class="error-card">
+          <div class="error-icon">
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#FF6B6B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10" />
+              <line x1="15" y1="9" x2="9" y2="15" />
+              <line x1="9" y1="9" x2="15" y2="15" />
+            </svg>
+          </div>
+          <h3 id="error-title">Connection Failed</h3>
+          <p id="error-message">—</p>
+          <div class="error-actions">
+            <button class="btn btn-primary" id="error-retry">Retry</button>
+            <button class="btn btn-ghost" id="error-dismiss">Go Back</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script src="popup.js"></script>
+  </body>
+</html>

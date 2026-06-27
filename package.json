@@ -1,0 +1,13 @@
+{
+  "name": "lan-transfer-signaling",
+  "version": "1.0.0",
+  "description": "Signaling server for LAN File Transfer Chrome extension",
+  "main": "signaling/signaling-server.js",
+  "scripts": {
+    "start": "node signaling/signaling-server.js"
+  },
+  "dependencies": {
+    "express": "^4.21.0",
+    "ws": "^8.21.0"
+  }
+}
