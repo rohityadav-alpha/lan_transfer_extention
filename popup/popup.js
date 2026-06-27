@@ -10,6 +10,11 @@
 // ═══════════════════════════════════════════════════════
 // Configuration
 // ═══════════════════════════════════════════════════════
+const CONFIG = {
+  // Cloud signaling server URL (wss:// for production)
+  // Leave empty '' to use local mode (requires running local signaling server)
+  SIGNALING_URL: 'wss://lan-transfer-extention.onrender.com'
+};
 const SIGNALING_PORT = 3000;
 const CHUNK_SIZE = 64 * 1024; // 64 KB
 const PROGRESS_RING_CIRCUMFERENCE = 2 * Math.PI * 34; // radius=34 from SVG
@@ -217,25 +222,27 @@ $('btn-create-room').onclick = async () => {
   $('send-step-waiting').classList.remove('hidden');
   $('room-code').textContent = code;
 
-  // Get local IP from signaling server
-  try {
-    const res = await fetch(`http://localhost:${SIGNALING_PORT}/my-ip`);
-    const data = await res.json();
-    $('server-ip').textContent = data.ip;
-  } catch {
-    $('server-ip').textContent = 'Start signaling server first!';
-    showError(
-      'Server Not Running',
-      'Please start the signaling server with "npm start" in the extension directory, then try again.',
-      () => $('btn-create-room').click(),
-      () => resetSendState()
-    );
-    return;
+  // Get local IP from signaling server (only in local mode)
+  if (!CONFIG.SIGNALING_URL) {
+    try {
+      const res = await fetch(`http://localhost:${SIGNALING_PORT}/my-ip`);
+      const data = await res.json();
+      $('server-ip').textContent = data.ip;
+    } catch {
+      $('server-ip').textContent = 'Start signaling server first!';
+      showError(
+        'Server Not Running',
+        'Please start the signaling server with "npm start" in the extension directory, then try again.',
+        () => $('btn-create-room').click(),
+        () => resetSendState()
+      );
+      return;
+    }
   }
 
   // Connect to signaling server via WebSocket
   try {
-    const wsUrl = `ws://localhost:${SIGNALING_PORT}`;
+    const wsUrl = CONFIG.SIGNALING_URL || `ws://localhost:${SIGNALING_PORT}`;
     const ws = new WebSocket(wsUrl);
     sendState.ws = ws;
 
@@ -528,7 +535,7 @@ $('btn-join-room').onclick = async () => {
   const code = $('code-input').value.trim().toUpperCase();
   const senderIp = $('sender-ip').value.trim();
 
-  if (!senderIp) {
+  if (!CONFIG.SIGNALING_URL && !senderIp) {
     showError('Missing IP', 'Please enter the sender\'s IP address.', null, null);
     return;
   }
@@ -547,7 +554,7 @@ $('btn-join-room').onclick = async () => {
   setConnDot($('recv-conn-dot'), 'connecting');
 
   try {
-    const wsUrl = `ws://${senderIp}:${SIGNALING_PORT}`;
+    const wsUrl = CONFIG.SIGNALING_URL || `ws://${senderIp}:${SIGNALING_PORT}`;
     const ws = new WebSocket(wsUrl);
     recvState.ws = ws;
 
@@ -567,9 +574,12 @@ $('btn-join-room').onclick = async () => {
 
     ws.onerror = () => {
       setConnDot($('recv-conn-dot'), 'disconnected');
+      const errorMsg = CONFIG.SIGNALING_URL
+        ? 'Could not connect to cloud signaling server. Check your internet.'
+        : `Could not connect to ${senderIp}:${SIGNALING_PORT}. Make sure the signaling server is running.`;
       showError(
         'Connection Failed',
-        `Could not connect to ${senderIp}:${SIGNALING_PORT}. Make sure the signaling server is running on the sender's machine.`,
+        errorMsg,
         () => $('btn-join-room').click(),
         () => resetReceiveState()
       );
@@ -792,4 +802,22 @@ function resetReceiveState() {
 // ═══════════════════════════════════════════════════════
 $('code-input').addEventListener('input', (e) => {
   e.target.value = e.target.value.toUpperCase();
+});
+
+// ═══════════════════════════════════════════════════════
+// Cloud Mode: Hide IP fields when cloud signaling is active
+// ═══════════════════════════════════════════════════════
+document.addEventListener('DOMContentLoaded', () => {
+  if (CONFIG.SIGNALING_URL) {
+    // Hide IP card on sender screen
+    const ipCard = document.querySelector('.ip-card');
+    if (ipCard) ipCard.classList.add('hidden');
+
+    // Hide Sender IP input group on receiver screen
+    const ipInput = $('sender-ip');
+    if (ipInput) {
+      const group = ipInput.closest('.input-group');
+      if (group) group.classList.add('hidden');
+    }
+  }
 });
