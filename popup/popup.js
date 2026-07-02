@@ -13,7 +13,35 @@
 const CONFIG = {
   // Cloud signaling server URL (wss:// for production)
   // Leave empty '' to use local mode (requires running local signaling server)
-  SIGNALING_URL: 'wss://lan-transfer-extention.onrender.com'
+  SIGNALING_URL: 'wss://lan-transfer-extention.onrender.com',
+
+  // ICE servers for NAT traversal (STUN discovers public IP, TURN relays when direct fails)
+  ICE_SERVERS: [
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'stun:stun2.l.google.com:19302' },
+    { urls: 'stun:stun.relay.metered.ca:80' },
+    {
+      urls: 'turn:global.relay.metered.ca:80',
+      username: 'e8dd65c5d2bc1e5fc9cbf131',
+      credential: '4/sYLzOBz++pAALg'
+    },
+    {
+      urls: 'turn:global.relay.metered.ca:80?transport=tcp',
+      username: 'e8dd65c5d2bc1e5fc9cbf131',
+      credential: '4/sYLzOBz++pAALg'
+    },
+    {
+      urls: 'turn:global.relay.metered.ca:443',
+      username: 'e8dd65c5d2bc1e5fc9cbf131',
+      credential: '4/sYLzOBz++pAALg'
+    },
+    {
+      urls: 'turns:global.relay.metered.ca:443?transport=tcp',
+      username: 'e8dd65c5d2bc1e5fc9cbf131',
+      credential: '4/sYLzOBz++pAALg'
+    }
+  ]
 };
 const SIGNALING_PORT = 3000;
 const CHUNK_SIZE = 64 * 1024; // 64 KB
@@ -310,7 +338,8 @@ function handleSenderMessage(msg) {
 }
 
 async function initiatePeerConnection(receiverId) {
-  const pc = new RTCPeerConnection({ iceServers: [] });
+  const iceConfig = CONFIG.SIGNALING_URL ? { iceServers: CONFIG.ICE_SERVERS } : { iceServers: [] };
+  const pc = new RTCPeerConnection(iceConfig);
   const channel = pc.createDataChannel('fileTransfer', { ordered: true });
   channel.binaryType = 'arraybuffer';
   channel.bufferedAmountLowThreshold = BUFFER_LOW;
@@ -330,9 +359,18 @@ async function initiatePeerConnection(receiverId) {
   };
 
   pc.onconnectionstatechange = () => {
+    console.log('[WebRTC Sender] Connection state:', pc.connectionState);
     if (pc.connectionState === 'failed') {
       showError('Connection Failed', 'WebRTC connection to receiver failed.', null, () => resetSendState());
     }
+  };
+
+  pc.oniceconnectionstatechange = () => {
+    console.log('[WebRTC Sender] ICE state:', pc.iceConnectionState);
+  };
+
+  pc.onicegatheringstatechange = () => {
+    console.log('[WebRTC Sender] ICE gathering:', pc.iceGatheringState);
   };
 
   channel.onopen = () => {
@@ -353,14 +391,14 @@ async function initiatePeerConnection(receiverId) {
     type: 'offer',
     code: sendState.roomCode,
     receiverId,
-    sdp: offer,
+    sdp: { type: offer.type, sdp: offer.sdp },
   }));
 }
 
 async function handleReceiverAnswer(receiverId, sdp) {
   const peer = sendState.peers[receiverId];
   if (!peer) return;
-  await peer.pc.setRemoteDescription(new RTCSessionDescription(sdp));
+  await peer.pc.setRemoteDescription(new RTCSessionDescription({ type: sdp.type, sdp: sdp.sdp }));
   // Flush queued ICE candidates
   if (peer._iceQueue) {
     for (const c of peer._iceQueue) {
@@ -624,7 +662,8 @@ function handleReceiverMessage(msg, code, senderIp) {
 }
 
 async function handleOffer(sdp, code) {
-  const pc = new RTCPeerConnection({ iceServers: [] });
+  const iceConfig = CONFIG.SIGNALING_URL ? { iceServers: CONFIG.ICE_SERVERS } : { iceServers: [] };
+  const pc = new RTCPeerConnection(iceConfig);
   recvState.pc = pc;
   recvState._iceQueue = [];
 
@@ -654,12 +693,21 @@ async function handleOffer(sdp, code) {
   };
 
   pc.onconnectionstatechange = () => {
+    console.log('[WebRTC] Connection state:', pc.connectionState);
     if (pc.connectionState === 'failed') {
       showError('Connection Failed', 'WebRTC connection failed.', null, () => resetReceiveState());
     }
   };
 
-  await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+  pc.oniceconnectionstatechange = () => {
+    console.log('[WebRTC] ICE connection state:', pc.iceConnectionState);
+    if (pc.iceConnectionState === 'failed') {
+      // Try ICE restart before giving up
+      console.warn('[WebRTC] ICE failed, connection may not establish');
+    }
+  };
+
+  await pc.setRemoteDescription(new RTCSessionDescription({ type: sdp.type, sdp: sdp.sdp }));
 
   // Flush queued ICE candidates
   if (recvState._iceQueue) {
@@ -676,7 +724,7 @@ async function handleOffer(sdp, code) {
     type: 'answer',
     code,
     receiverId: recvState.receiverId,
-    sdp: answer,
+    sdp: { type: answer.type, sdp: answer.sdp },
   }));
 }
 
