@@ -897,6 +897,133 @@ h1 {
 }
 
 /* ═══════════════════════════════════════════════════════
+   Text Clipboard Feature
+   ═══════════════════════════════════════════════════════ */
+
+/* ─── Send Text action card gradient ─── */
+.action-text {
+  --card-accent: #FF9F43;
+}
+.action-text .action-icon {
+  background: rgba(255, 159, 67, 0.1);
+  color: #FF9F43;
+}
+.action-text::before {
+  background: linear-gradient(135deg, rgba(255, 159, 67, 0.08), transparent);
+}
+
+/* ─── Text Input Area ─── */
+.text-input-wrap {
+  position: relative;
+  margin-bottom: var(--space-lg);
+}
+
+.text-input-area {
+  width: 100%;
+  min-height: 140px;
+  max-height: 300px;
+  padding: var(--space-lg);
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-family: 'Inter', sans-serif;
+  font-size: 13px;
+  line-height: 1.6;
+  resize: vertical;
+  outline: none;
+  transition: border-color var(--transition), box-shadow var(--transition);
+}
+
+.text-input-area::placeholder {
+  color: var(--text-muted);
+}
+
+.text-input-area:focus {
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 3px var(--primary-glow);
+}
+
+.char-count {
+  display: block;
+  text-align: right;
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: var(--space-xs);
+  padding-right: var(--space-xs);
+}
+
+/* ─── Text Display Card (Receiver) ─── */
+.text-display-card {
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-lg);
+  margin: var(--space-lg) 0;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.text-display-content {
+  font-family: 'Inter', sans-serif;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 0;
+}
+
+/* ─── Copy Button ─── */
+.btn-copy {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-sm);
+  width: 100%;
+  padding: var(--space-md) var(--space-xl);
+  background: linear-gradient(135deg, #FF9F43, #FF6B6B);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-md);
+  font-family: 'Inter', sans-serif;
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+  transition: transform var(--transition), box-shadow var(--transition), opacity var(--transition);
+}
+
+.btn-copy:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(255, 159, 67, 0.3);
+}
+
+.btn-copy:active {
+  transform: translateY(0);
+}
+
+.btn-copy.copied {
+  background: linear-gradient(135deg, var(--accent), var(--accent-dark));
+}
+
+/* ─── Scrollbar styling for text areas ─── */
+.text-display-card::-webkit-scrollbar,
+.text-input-area::-webkit-scrollbar {
+  width: 4px;
+}
+
+.text-display-card::-webkit-scrollbar-track,
+.text-input-area::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.text-display-card::-webkit-scrollbar-thumb,
+.text-input-area::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+}
+
+/* ═══════════════════════════════════════════════════════
    Responsive: Wide side panel (>420px) or full tab view
    ═══════════════════════════════════════════════════════ */
 @media (min-width: 420px) {

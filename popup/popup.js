@@ -83,6 +83,7 @@ const $ = (id) => document.getElementById(id);
 const screens = {
   home: $('screen-home'),
   send: $('screen-send'),
+  'send-text': $('screen-send-text'),
   receive: $('screen-receive'),
 };
 
@@ -96,8 +97,10 @@ function showScreen(name) {
 
 $('btn-go-send').onclick = () => showScreen('send');
 $('btn-go-receive').onclick = () => showScreen('receive');
+$('btn-go-send-text').onclick = () => showScreen('send-text');
 $('back-from-send').onclick = () => resetSendState();
 $('back-from-receive').onclick = () => resetReceiveState();
+$('back-from-send-text').onclick = () => resetTextSendState();
 
 // ═══════════════════════════════════════════════════════
 // Utility Functions
@@ -740,7 +743,10 @@ async function handleReceiverIceCandidate(candidate) {
 function handleDataMessage(event) {
   if (typeof event.data === 'string') {
     const msg = JSON.parse(event.data);
-    if (msg.type === 'meta') {
+    if (msg.type === 'text-data') {
+      // ─── Text transfer received ───
+      showReceivedText(msg.text);
+    } else if (msg.type === 'meta') {
       recvState.fileMeta = msg;
       recvState.chunks = [];
       recvState.tracker.reset(msg.size);
@@ -789,6 +795,8 @@ function assembleAndDownload() {
   // Show completion
   $('recv-step-transfer').classList.add('hidden');
   $('recv-step-done').classList.remove('hidden');
+  $('recv-done-file').classList.remove('hidden');
+  $('recv-done-text').classList.add('hidden');
   const meta = recvState.fileMeta;
   $('done-recv-details').textContent = `${meta ? meta.name : 'File'} (${meta ? formatSize(meta.size) : '—'}) downloaded successfully.`;
 
@@ -798,6 +806,26 @@ function assembleAndDownload() {
     runtime.sendMessage({
       type: 'transfer-complete',
       fileName: meta ? meta.name : 'file',
+    });
+  } catch (_) { }
+}
+
+// ─── Text Received Display ─────────────────────────────
+function showReceivedText(text) {
+  recvState.receivedText = text;
+
+  $('recv-step-transfer').classList.add('hidden');
+  $('recv-step-done').classList.remove('hidden');
+  $('recv-done-file').classList.add('hidden');
+  $('recv-done-text').classList.remove('hidden');
+  $('recv-text-content').textContent = text;
+
+  // Notify service worker
+  try {
+    const runtime = (typeof browser !== 'undefined' ? browser : chrome).runtime;
+    runtime.sendMessage({
+      type: 'transfer-complete',
+      fileName: 'Text clipboard',
     });
   } catch (_) { }
 }
@@ -814,6 +842,22 @@ $('btn-cancel-recv').onclick = () => {
 };
 
 $('btn-receive-another').onclick = () => resetReceiveState();
+$('btn-receive-another-text').onclick = () => resetReceiveState();
+
+// Copy received text to clipboard
+$('btn-copy-text').onclick = () => {
+  const text = recvState.receivedText || $('recv-text-content').textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = $('btn-copy-text');
+    const origHTML = btn.innerHTML;
+    btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg> Copied!';
+    btn.classList.add('copied');
+    setTimeout(() => {
+      btn.innerHTML = origHTML;
+      btn.classList.remove('copied');
+    }, 2000);
+  });
+};
 
 function resetReceiveState() {
   if (recvState.ws) {
@@ -832,11 +876,14 @@ function resetReceiveState() {
   recvState.chunks = [];
   recvState.cancelled = false;
   recvState._iceQueue = [];
+  recvState.receivedText = null;
 
   // Reset UI
   $('recv-step-join').classList.remove('hidden');
   $('recv-step-transfer').classList.add('hidden');
   $('recv-step-done').classList.add('hidden');
+  $('recv-done-file').classList.remove('hidden');
+  $('recv-done-text').classList.add('hidden');
   $('recv-transfer-info').classList.add('hidden');
   $('recv-file-info').classList.add('hidden');
   setConnDot($('recv-conn-dot'), 'disconnected');
@@ -870,3 +917,238 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 });
+
+// ═══════════════════════════════════════════════════════
+// ─── SEND TEXT SIDE ────────────────────────────────────
+// ═══════════════════════════════════════════════════════
+let textSendState = {
+  text: '',
+  ws: null,
+  roomCode: null,
+  peers: {},
+  cancelled: false,
+};
+
+// Text input handling
+$('text-content').oninput = () => {
+  const text = $('text-content').value;
+  textSendState.text = text;
+  const len = text.length;
+  $('char-count').textContent = len === 1 ? '1 character' : `${len.toLocaleString()} characters`;
+  $('btn-create-text-room').disabled = len === 0;
+};
+
+// Create text room
+$('btn-create-text-room').onclick = async () => {
+  if (!textSendState.text) return;
+
+  const code = generateRoomCode();
+  textSendState.roomCode = code;
+  textSendState.cancelled = false;
+
+  // Switch to waiting step
+  $('text-step-input').classList.add('hidden');
+  $('text-step-waiting').classList.remove('hidden');
+  $('text-room-code').textContent = code;
+
+  // Connect to signaling server via WebSocket
+  try {
+    const wsUrl = CONFIG.SIGNALING_URL || `ws://localhost:${SIGNALING_PORT}`;
+    const ws = new WebSocket(wsUrl);
+    textSendState.ws = ws;
+
+    setConnDot($('text-conn-dot'), 'connecting');
+
+    ws.onopen = () => {
+      setConnDot($('text-conn-dot'), 'connected');
+      ws.send(JSON.stringify({
+        type: 'create-room',
+        code,
+        fileMeta: {
+          name: 'Text Clipboard',
+          size: new Blob([textSendState.text]).size,
+          totalChunks: 1,
+          mimeType: 'text/plain',
+          transferType: 'text',
+        },
+      }));
+      updateTextSendStatus('Room created! Waiting for receiver...', 'info');
+    };
+
+    ws.onmessage = (event) => handleTextSignalingMessage(JSON.parse(event.data));
+
+    ws.onerror = () => {
+      showError('Connection Error', 'Could not connect to signaling server.', null, () => resetTextSendState());
+    };
+
+    ws.onclose = () => {
+      setConnDot($('text-conn-dot'), 'disconnected');
+    };
+  } catch (err) {
+    showError('Connection Error', err.message, null, () => resetTextSendState());
+  }
+};
+
+function handleTextSignalingMessage(msg) {
+  switch (msg.type) {
+    case 'receiver-joined': {
+      updateTextSendStatus(`Receiver connected! Sending text...`, 'success');
+      initiateTextPeerConnection(msg.receiverId);
+      break;
+    }
+    case 'answer':
+      handleTextReceiverAnswer(msg.from, msg.sdp);
+      break;
+
+    case 'ice':
+      handleTextSenderIce(msg.from, msg.candidate);
+      break;
+
+    case 'receiver-left':
+      cleanupTextPeer(msg.receiverId);
+      break;
+
+    case 'error':
+      showError('Signaling Error', msg.message, null, () => resetTextSendState());
+      break;
+  }
+}
+
+async function initiateTextPeerConnection(receiverId) {
+  const iceConfig = CONFIG.SIGNALING_URL ? { iceServers: CONFIG.ICE_SERVERS } : { iceServers: [] };
+  const pc = new RTCPeerConnection(iceConfig);
+  const channel = pc.createDataChannel('textTransfer', { ordered: true });
+  channel.binaryType = 'arraybuffer';
+
+  textSendState.peers[receiverId] = { pc, channel };
+
+  pc.onicecandidate = (e) => {
+    if (e.candidate && textSendState.ws && textSendState.ws.readyState === WebSocket.OPEN) {
+      textSendState.ws.send(JSON.stringify({
+        type: 'ice',
+        code: textSendState.roomCode,
+        from: 'sender',
+        to: receiverId,
+        candidate: e.candidate,
+      }));
+    }
+  };
+
+  pc.onconnectionstatechange = () => {
+    if (pc.connectionState === 'failed') {
+      showError('Connection Failed', 'WebRTC connection to receiver failed.', null, () => resetTextSendState());
+    }
+  };
+
+  channel.onopen = () => {
+    // Send text as a single message
+    channel.send(JSON.stringify({
+      type: 'text-data',
+      text: textSendState.text,
+    }));
+
+    // Show completion
+    updateTextSendStatus('Text sent successfully!', 'success');
+    setTimeout(() => {
+      $('text-step-waiting').classList.add('hidden');
+      $('text-step-done').classList.remove('hidden');
+      const textLen = textSendState.text.length;
+      $('done-text-details').textContent = `${textLen.toLocaleString()} characters sent successfully.`;
+    }, 500);
+  };
+
+  channel.onerror = (e) => {
+    console.warn('Text DataChannel error:', e);
+  };
+
+  // Create and send offer
+  const offer = await pc.createOffer();
+  await pc.setLocalDescription(offer);
+
+  textSendState.ws.send(JSON.stringify({
+    type: 'offer',
+    code: textSendState.roomCode,
+    receiverId,
+    sdp: { type: offer.type, sdp: offer.sdp },
+  }));
+}
+
+async function handleTextReceiverAnswer(receiverId, sdp) {
+  const peer = textSendState.peers[receiverId];
+  if (!peer) return;
+  await peer.pc.setRemoteDescription(new RTCSessionDescription({ type: sdp.type, sdp: sdp.sdp }));
+  if (peer._iceQueue) {
+    for (const c of peer._iceQueue) {
+      try { await peer.pc.addIceCandidate(new RTCIceCandidate(c)); } catch (e) { console.warn(e); }
+    }
+    peer._iceQueue = [];
+  }
+}
+
+async function handleTextSenderIce(from, candidate) {
+  const peer = textSendState.peers[from];
+  if (!peer) return;
+  if (peer.pc.remoteDescription) {
+    try { await peer.pc.addIceCandidate(new RTCIceCandidate(candidate)); } catch (e) { console.warn(e); }
+  } else {
+    if (!peer._iceQueue) peer._iceQueue = [];
+    peer._iceQueue.push(candidate);
+  }
+}
+
+function cleanupTextPeer(receiverId) {
+  const peer = textSendState.peers[receiverId];
+  if (peer) {
+    try { peer.channel.close(); } catch (_) { }
+    try { peer.pc.close(); } catch (_) { }
+    delete textSendState.peers[receiverId];
+  }
+}
+
+function updateTextSendStatus(msg, variant) {
+  const el = $('text-send-status');
+  el.className = `status-badge status-${variant}`;
+  el.querySelector('span').textContent = msg;
+}
+
+$('copy-text-code').onclick = () => {
+  const code = $('text-room-code').textContent;
+  navigator.clipboard.writeText(code).then(() => {
+    const btn = $('copy-text-code');
+    btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#00C896" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>';
+    setTimeout(() => {
+      btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+    }, 2000);
+  });
+};
+
+$('btn-cancel-text-send').onclick = () => {
+  textSendState.cancelled = true;
+  resetTextSendState();
+};
+
+$('btn-send-another-text').onclick = () => resetTextSendState();
+
+function resetTextSendState() {
+  if (textSendState.ws) {
+    try { textSendState.ws.close(); } catch (_) { }
+    textSendState.ws = null;
+  }
+  for (const id of Object.keys(textSendState.peers)) {
+    cleanupTextPeer(id);
+  }
+  textSendState.text = '';
+  textSendState.roomCode = null;
+  textSendState.cancelled = false;
+
+  // Reset UI
+  $('text-step-input').classList.remove('hidden');
+  $('text-step-waiting').classList.add('hidden');
+  $('text-step-done').classList.add('hidden');
+  $('text-content').value = '';
+  $('char-count').textContent = '0 characters';
+  $('btn-create-text-room').disabled = true;
+  setConnDot($('text-conn-dot'), 'disconnected');
+
+  showScreen('home');
+}

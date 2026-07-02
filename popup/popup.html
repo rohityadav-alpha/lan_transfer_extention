@@ -60,14 +60,30 @@
               </svg>
             </div>
             <div class="action-text">
-              <span class="action-title">Receive File</span>
-              <span class="action-desc">Download a file using a room code</span>
+              <span class="action-title">Receive</span>
+              <span class="action-desc">Get a file or text using a room code</span>
+            </div>
+            <svg class="action-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6" /></svg>
+          </button>
+
+          <button class="action-card action-text" id="btn-go-send-text">
+            <div class="action-icon">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="8" y="2" width="8" height="4" rx="1" />
+                <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
+                <line x1="9" y1="12" x2="15" y2="12" />
+                <line x1="9" y1="16" x2="13" y2="16" />
+              </svg>
+            </div>
+            <div class="action-text">
+              <span class="action-title">Send Text</span>
+              <span class="action-desc">Share clipboard text instantly</span>
             </div>
             <svg class="action-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6" /></svg>
           </button>
         </div>
 
-        <p class="version">v1.0.0</p>
+        <p class="version">v1.1.0</p>
       </div>
 
       <!-- ═══ SEND SCREEN ═══ -->
@@ -185,6 +201,69 @@
         </div>
       </div>
 
+      <!-- ═══ SEND TEXT SCREEN ═══ -->
+      <div id="screen-send-text" class="screen">
+        <button class="back-btn" id="back-from-send-text">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6" /></svg>
+          Back
+        </button>
+
+        <div class="screen-header">
+          <h2>Send Text</h2>
+          <div class="connection-dot" id="text-conn-dot" title="Disconnected"></div>
+        </div>
+
+        <!-- Step 1: Text Input -->
+        <div id="text-step-input">
+          <div class="text-input-wrap">
+            <textarea class="text-input-area" id="text-content" placeholder="Type or paste your text here..." rows="6"></textarea>
+            <span class="char-count" id="char-count">0 characters</span>
+          </div>
+
+          <button class="btn btn-primary" id="btn-create-text-room" disabled>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+            Generate Room Code
+          </button>
+        </div>
+
+        <!-- Step 2: Waiting -->
+        <div id="text-step-waiting" class="hidden">
+          <div class="room-card">
+            <div class="room-card-header">
+              <span class="room-label">Room Code</span>
+              <button class="btn-icon" id="copy-text-code" title="Copy code">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              </button>
+            </div>
+            <div class="room-code" id="text-room-code">------</div>
+          </div>
+
+          <div id="text-send-status" class="status-badge status-info">
+            <div class="status-pulse"></div>
+            <span>Waiting for receiver to connect...</span>
+          </div>
+
+          <button class="btn btn-danger" id="btn-cancel-text-send">
+            Cancel
+          </button>
+        </div>
+
+        <!-- Step 3: Complete -->
+        <div id="text-step-done" class="hidden">
+          <div class="done-card">
+            <div class="done-icon">
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#00C896" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                <polyline points="22 4 12 14.01 9 11.01" />
+              </svg>
+            </div>
+            <h3>Text Sent!</h3>
+            <p id="done-text-details">—</p>
+            <button class="btn btn-primary" id="btn-send-another-text">Send Another Text</button>
+          </div>
+        </div>
+      </div>
+
       <!-- ═══ RECEIVE SCREEN ═══ -->
       <div id="screen-receive" class="screen">
         <button class="back-btn" id="back-from-receive">
@@ -269,7 +348,8 @@
 
         <!-- Step 3: Complete -->
         <div id="recv-step-done" class="hidden">
-          <div class="done-card">
+          <!-- File download complete -->
+          <div id="recv-done-file" class="done-card">
             <div class="done-icon">
               <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#00C896" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
@@ -278,7 +358,26 @@
             </div>
             <h3>Download Complete!</h3>
             <p id="done-recv-details">—</p>
-            <button class="btn btn-accent" id="btn-receive-another">Receive Another File</button>
+            <button class="btn btn-accent" id="btn-receive-another">Receive Another</button>
+          </div>
+
+          <!-- Text received -->
+          <div id="recv-done-text" class="done-card hidden">
+            <div class="done-icon">
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#00C896" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                <polyline points="22 4 12 14.01 9 11.01" />
+              </svg>
+            </div>
+            <h3>Text Received!</h3>
+            <div class="text-display-card">
+              <pre class="text-display-content" id="recv-text-content"></pre>
+            </div>
+            <button class="btn btn-copy" id="btn-copy-text">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              Copy to Clipboard
+            </button>
+            <button class="btn btn-accent" id="btn-receive-another-text" style="margin-top: 8px;">Receive Another</button>
           </div>
         </div>
       </div>
