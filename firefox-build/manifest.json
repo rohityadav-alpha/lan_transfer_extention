@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "LAN File Transfer",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "description": "Transfer files and text directly between browsers on your local network — no internet, no cloud, no USB. Peer-to-peer via WebRTC.",
   "browser_specific_settings": {
     "gecko": {
