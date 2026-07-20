@@ -240,7 +240,9 @@ function updateSendButtonState() {
 const dropZone = $('drop-zone');
 const fileInput = $('file-input');
 
-dropZone.onclick = () => fileInput.click();
+// On desktop, clicking the overlay input opens file picker directly.
+// On mobile, tapping the overlay input opens file picker natively.
+// No need for dropZone.onclick = () => fileInput.click() anymore.
 dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('dragover'); });
 dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
 dropZone.addEventListener('drop', (e) => { e.preventDefault(); dropZone.classList.remove('dragover'); handleFileSelect(e.dataTransfer.files[0]); });
@@ -260,7 +262,7 @@ $('file-remove').onclick = (e) => {
   e.stopPropagation();
   sendState.file = null;
   $('file-info').classList.add('hidden');
-  $('drop-label').textContent = 'Click or drag a file here';
+  $('drop-label').textContent = 'Tap or drag a file here';
   fileInput.value = '';
   updateSendButtonState();
 };
@@ -628,7 +630,7 @@ function resetSendState() {
   $('send-step-done').classList.add('hidden');
   $('send-transfer-info').classList.add('hidden');
   $('file-info').classList.add('hidden');
-  $('drop-label').textContent = 'Click or drag a file here';
+  $('drop-label').textContent = 'Tap or drag a file here';
   $('send-text-content').value = '';
   $('send-char-count').textContent = '0 characters';
   $('btn-create-room').disabled = true;
