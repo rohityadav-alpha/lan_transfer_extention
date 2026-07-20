@@ -898,15 +898,17 @@ $('btn-copy-text').onclick = () => {
   const text = recvState.receivedText || $('recv-text-content').textContent;
   navigator.clipboard.writeText(text).then(() => {
     const btn = $('btn-copy-text');
-    const origHTML = btn.innerHTML;
-    btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg> Copied!';
+    const originalText = btn.querySelector('span') ? btn.querySelector('span').textContent : btn.textContent;
+    // Show "Copied!" feedback safely without innerHTML
+    btn.textContent = '✓ Copied!';
     btn.classList.add('copied');
     setTimeout(() => {
-      btn.innerHTML = origHTML;
+      btn.textContent = 'Copy to Clipboard';
       btn.classList.remove('copied');
     }, 2000);
   });
 };
+
 
 function resetReceiveState() {
   if (recvState.ws) {
