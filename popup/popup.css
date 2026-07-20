@@ -1040,3 +1040,44 @@ h1 {
     font-size: 38px;
   }
 }
+
+/* ─── Send Screen: Text section ─────────────────────── */
+.send-text-section {
+  margin-top: var(--space-lg);
+}
+
+.send-text-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  margin-bottom: var(--space-sm);
+}
+
+.send-text-optional {
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+  opacity: 0.7;
+}
+
+/* ─── Receive Done: stacked cards ───────────────────── */
+#recv-step-done {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+}
+
+.done-icon-sm {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: var(--space-sm);
+}
+
+.recv-another-btn {
+  margin-top: 0;
+}
+

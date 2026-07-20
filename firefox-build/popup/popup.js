@@ -83,7 +83,6 @@ const $ = (id) => document.getElementById(id);
 const screens = {
   home: $('screen-home'),
   send: $('screen-send'),
-  'send-text': $('screen-send-text'),
   receive: $('screen-receive'),
 };
 
@@ -97,10 +96,8 @@ function showScreen(name) {
 
 $('btn-go-send').onclick = () => showScreen('send');
 $('btn-go-receive').onclick = () => showScreen('receive');
-$('btn-go-send-text').onclick = () => showScreen('send-text');
 $('back-from-send').onclick = () => resetSendState();
 $('back-from-receive').onclick = () => resetReceiveState();
-$('back-from-send-text').onclick = () => resetTextSendState();
 
 // ═══════════════════════════════════════════════════════
 // Utility Functions
@@ -204,12 +201,20 @@ class TransferTracker {
 // ═══════════════════════════════════════════════════════
 let sendState = {
   file: null,
+  text: '',
   ws: null,
   roomCode: null,
   peers: {}, // receiverId -> { pc, channel }
   tracker: new TransferTracker(),
   cancelled: false,
 };
+
+// ─── Helper: enable/disable Generate Room Code button ───
+function updateSendButtonState() {
+  const hasFile = !!sendState.file;
+  const hasText = $('send-text-content').value.trim().length > 0;
+  $('btn-create-room').disabled = !(hasFile || hasText);
+}
 
 // File selection
 const dropZone = $('drop-zone');
@@ -228,7 +233,7 @@ function handleFileSelect(file) {
   $('file-size').textContent = formatSize(file.size);
   $('file-info').classList.remove('hidden');
   $('drop-label').textContent = file.name;
-  $('btn-create-room').disabled = false;
+  updateSendButtonState();
 }
 
 $('file-remove').onclick = (e) => {
@@ -236,13 +241,22 @@ $('file-remove').onclick = (e) => {
   sendState.file = null;
   $('file-info').classList.add('hidden');
   $('drop-label').textContent = 'Click or drag a file here';
-  $('btn-create-room').disabled = true;
   fileInput.value = '';
+  updateSendButtonState();
 };
 
-// Create room
+// Text input handling
+$('send-text-content').oninput = () => {
+  const len = $('send-text-content').value.length;
+  $('send-char-count').textContent = len === 1 ? '1 character' : `${len.toLocaleString()} characters`;
+  updateSendButtonState();
+};
+
+// Create room (unified: file + text)
 $('btn-create-room').onclick = async () => {
-  if (!sendState.file) return;
+  const text = $('send-text-content').value.trim();
+  sendState.text = text;
+  if (!sendState.file && !sendState.text) return;
 
   const code = generateRoomCode();
   sendState.roomCode = code;
@@ -271,6 +285,20 @@ $('btn-create-room').onclick = async () => {
     }
   }
 
+  // Build unified fileMeta
+  const hasFile = !!sendState.file;
+  const hasText = !!sendState.text;
+  const fileMeta = { hasFile, hasText };
+  if (hasFile) {
+    fileMeta.name = sendState.file.name;
+    fileMeta.size = sendState.file.size;
+    fileMeta.totalChunks = Math.ceil(sendState.file.size / CHUNK_SIZE);
+    fileMeta.mimeType = sendState.file.type || 'application/octet-stream';
+  }
+  if (hasText) {
+    fileMeta.textLength = sendState.text.length;
+  }
+
   // Connect to signaling server via WebSocket
   try {
     const wsUrl = CONFIG.SIGNALING_URL || `ws://localhost:${SIGNALING_PORT}`;
@@ -285,19 +313,11 @@ $('btn-create-room').onclick = async () => {
       ws.send(JSON.stringify({
         type: 'create-room',
         code,
-        fileMeta: {
-          name: sendState.file.name,
-          size: sendState.file.size,
-          totalChunks: Math.ceil(sendState.file.size / CHUNK_SIZE),
-          mimeType: sendState.file.type || 'application/octet-stream',
-        },
+        fileMeta,
       }));
     };
 
-    ws.onmessage = (event) => {
-      const msg = JSON.parse(event.data);
-      handleSenderMessage(msg);
-    };
+    ws.onmessage = (event) => handleSenderMessage(JSON.parse(event.data));
 
     ws.onerror = () => {
       setConnDot($('send-conn-dot'), 'disconnected');
@@ -376,9 +396,29 @@ async function initiatePeerConnection(receiverId) {
     console.log('[WebRTC Sender] ICE gathering:', pc.iceGatheringState);
   };
 
-  channel.onopen = () => {
-    updateSendStatus('Connected! Sending file...', 'success');
-    sendFileOverChannel(channel, receiverId);
+  channel.onopen = async () => {
+    updateSendStatus('Connected! Sending...', 'success');
+
+    // 1. Send text first if present
+    if (sendState.text) {
+      channel.send(JSON.stringify({ type: 'text-data', text: sendState.text }));
+    }
+
+    // 2. Send file if present (sendFileOverChannel sends 'done' internally)
+    if (sendState.file) {
+      await sendFileOverChannel(channel, receiverId);
+    } else {
+      // Text-only: send completion signal and show done UI
+      channel.send(JSON.stringify({ type: 'done' }));
+      $('send-step-waiting').classList.add('hidden');
+      $('send-step-done').classList.remove('hidden');
+      $('done-send-details').textContent =
+        `${sendState.text.length.toLocaleString()} characters sent successfully.`;
+      try {
+        const runtime = (typeof browser !== 'undefined' ? browser : chrome).runtime;
+        runtime.sendMessage({ type: 'transfer-complete', fileName: 'Text clipboard' });
+      } catch (_) { }
+    }
   };
 
   channel.onerror = (e) => {
@@ -539,6 +579,7 @@ function resetSendState() {
     cleanupPeer(id);
   }
   sendState.file = null;
+  sendState.text = '';
   sendState.roomCode = null;
   sendState.cancelled = false;
 
@@ -549,6 +590,8 @@ function resetSendState() {
   $('send-transfer-info').classList.add('hidden');
   $('file-info').classList.add('hidden');
   $('drop-label').textContent = 'Click or drag a file here';
+  $('send-text-content').value = '';
+  $('send-char-count').textContent = '0 characters';
   $('btn-create-room').disabled = true;
   fileInput.value = '';
   setConnDot($('send-conn-dot'), 'disconnected');
@@ -637,11 +680,19 @@ $('btn-join-room').onclick = async () => {
 function handleReceiverMessage(msg, code, senderIp) {
   switch (msg.type) {
     case 'room-joined': {
-      updateRecvStatus('Joined room. Waiting for file transfer...', 'info');
-      if (msg.fileMeta) {
+      // Store fileMeta for type detection later
+      recvState.fileMeta = msg.fileMeta || null;
+      const meta = recvState.fileMeta;
+      if (meta && meta.hasFile) {
+        updateRecvStatus('Joined room. Waiting for file transfer...', 'info');
         $('recv-file-info').classList.remove('hidden');
-        $('recv-file-name').textContent = msg.fileMeta.name;
-        $('recv-file-size').textContent = formatSize(msg.fileMeta.size);
+        $('recv-file-name').textContent = meta.name || 'File';
+        $('recv-file-size').textContent = formatSize(meta.size || 0);
+      } else if (meta && meta.hasText) {
+        updateRecvStatus('Joined room. Waiting for text...', 'info');
+        $('recv-file-info').classList.add('hidden');
+      } else {
+        updateRecvStatus('Joined room. Waiting for transfer...', 'info');
       }
       break;
     }
@@ -744,8 +795,8 @@ function handleDataMessage(event) {
   if (typeof event.data === 'string') {
     const msg = JSON.parse(event.data);
     if (msg.type === 'text-data') {
-      // ─── Text transfer received ───
-      showReceivedText(msg.text);
+      // Save received text — will display on done screen
+      recvState.receivedText = msg.text;
     } else if (msg.type === 'meta') {
       recvState.fileMeta = msg;
       recvState.chunks = [];
@@ -759,7 +810,7 @@ function handleDataMessage(event) {
 
       updateRecvStatus(`Receiving: ${msg.name}`, 'success');
     } else if (msg.type === 'done') {
-      assembleAndDownload();
+      finishReceive();
     } else if (msg.type === 'cancelled') {
       showError('Transfer Cancelled', 'The sender cancelled the transfer.', null, () => resetReceiveState());
     }
@@ -769,6 +820,37 @@ function handleDataMessage(event) {
     recvState.tracker.addBytes(event.data.byteLength);
     updateRecvProgress();
   }
+}
+
+// ─── Finish receiving: handle file and/or text ─────────────────────
+function finishReceive() {
+  const hasFile = recvState.chunks && recvState.chunks.length > 0;
+  const hasText = !!recvState.receivedText;
+
+  $('recv-step-transfer').classList.add('hidden');
+  $('recv-step-done').classList.remove('hidden');
+
+  if (hasFile) {
+    assembleAndDownload();
+  }
+  if (hasText) {
+    $('recv-done-text').classList.remove('hidden');
+    $('recv-text-content').textContent = recvState.receivedText;
+  }
+  if (!hasFile && !hasText) {
+    // Fallback: show generic done
+    $('recv-done-file').classList.remove('hidden');
+    $('done-recv-details').textContent = 'Transfer complete.';
+  }
+
+  // Notify service worker
+  try {
+    const runtime = (typeof browser !== 'undefined' ? browser : chrome).runtime;
+    runtime.sendMessage({
+      type: 'transfer-complete',
+      fileName: hasFile ? (recvState.fileMeta?.name || 'file') : 'Text clipboard',
+    });
+  } catch (_) { }
 }
 
 function updateRecvProgress() {
@@ -792,42 +874,10 @@ function assembleAndDownload() {
   document.body.removeChild(a);
   setTimeout(() => URL.revokeObjectURL(url), 10000);
 
-  // Show completion
-  $('recv-step-transfer').classList.add('hidden');
-  $('recv-step-done').classList.remove('hidden');
+  // Show file done card
   $('recv-done-file').classList.remove('hidden');
-  $('recv-done-text').classList.add('hidden');
   const meta = recvState.fileMeta;
   $('done-recv-details').textContent = `${meta ? meta.name : 'File'} (${meta ? formatSize(meta.size) : '—'}) downloaded successfully.`;
-
-  // Notify service worker (cross-browser: Firefox uses browser.*, Chrome uses chrome.*)
-  try {
-    const runtime = (typeof browser !== 'undefined' ? browser : chrome).runtime;
-    runtime.sendMessage({
-      type: 'transfer-complete',
-      fileName: meta ? meta.name : 'file',
-    });
-  } catch (_) { }
-}
-
-// ─── Text Received Display ─────────────────────────────
-function showReceivedText(text) {
-  recvState.receivedText = text;
-
-  $('recv-step-transfer').classList.add('hidden');
-  $('recv-step-done').classList.remove('hidden');
-  $('recv-done-file').classList.add('hidden');
-  $('recv-done-text').classList.remove('hidden');
-  $('recv-text-content').textContent = text;
-
-  // Notify service worker
-  try {
-    const runtime = (typeof browser !== 'undefined' ? browser : chrome).runtime;
-    runtime.sendMessage({
-      type: 'transfer-complete',
-      fileName: 'Text clipboard',
-    });
-  } catch (_) { }
 }
 
 function updateRecvStatus(msg, variant) {
@@ -842,7 +892,6 @@ $('btn-cancel-recv').onclick = () => {
 };
 
 $('btn-receive-another').onclick = () => resetReceiveState();
-$('btn-receive-another-text').onclick = () => resetReceiveState();
 
 // Copy received text to clipboard
 $('btn-copy-text').onclick = () => {
@@ -882,7 +931,7 @@ function resetReceiveState() {
   $('recv-step-join').classList.remove('hidden');
   $('recv-step-transfer').classList.add('hidden');
   $('recv-step-done').classList.add('hidden');
-  $('recv-done-file').classList.remove('hidden');
+  $('recv-done-file').classList.add('hidden');
   $('recv-done-text').classList.add('hidden');
   $('recv-transfer-info').classList.add('hidden');
   $('recv-file-info').classList.add('hidden');
@@ -892,13 +941,6 @@ function resetReceiveState() {
 
   showScreen('home');
 }
-
-// ═══════════════════════════════════════════════════════
-// Auto-uppercase room code input
-// ═══════════════════════════════════════════════════════
-$('code-input').addEventListener('input', (e) => {
-  e.target.value = e.target.value.toUpperCase();
-});
 
 // ═══════════════════════════════════════════════════════
 // Cloud Mode: Hide IP fields when cloud signaling is active
@@ -917,238 +959,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 });
-
-// ═══════════════════════════════════════════════════════
-// ─── SEND TEXT SIDE ────────────────────────────────────
-// ═══════════════════════════════════════════════════════
-let textSendState = {
-  text: '',
-  ws: null,
-  roomCode: null,
-  peers: {},
-  cancelled: false,
-};
-
-// Text input handling
-$('text-content').oninput = () => {
-  const text = $('text-content').value;
-  textSendState.text = text;
-  const len = text.length;
-  $('char-count').textContent = len === 1 ? '1 character' : `${len.toLocaleString()} characters`;
-  $('btn-create-text-room').disabled = len === 0;
-};
-
-// Create text room
-$('btn-create-text-room').onclick = async () => {
-  if (!textSendState.text) return;
-
-  const code = generateRoomCode();
-  textSendState.roomCode = code;
-  textSendState.cancelled = false;
-
-  // Switch to waiting step
-  $('text-step-input').classList.add('hidden');
-  $('text-step-waiting').classList.remove('hidden');
-  $('text-room-code').textContent = code;
-
-  // Connect to signaling server via WebSocket
-  try {
-    const wsUrl = CONFIG.SIGNALING_URL || `ws://localhost:${SIGNALING_PORT}`;
-    const ws = new WebSocket(wsUrl);
-    textSendState.ws = ws;
-
-    setConnDot($('text-conn-dot'), 'connecting');
-
-    ws.onopen = () => {
-      setConnDot($('text-conn-dot'), 'connected');
-      ws.send(JSON.stringify({
-        type: 'create-room',
-        code,
-        fileMeta: {
-          name: 'Text Clipboard',
-          size: new Blob([textSendState.text]).size,
-          totalChunks: 1,
-          mimeType: 'text/plain',
-          transferType: 'text',
-        },
-      }));
-      updateTextSendStatus('Room created! Waiting for receiver...', 'info');
-    };
-
-    ws.onmessage = (event) => handleTextSignalingMessage(JSON.parse(event.data));
-
-    ws.onerror = () => {
-      showError('Connection Error', 'Could not connect to signaling server.', null, () => resetTextSendState());
-    };
-
-    ws.onclose = () => {
-      setConnDot($('text-conn-dot'), 'disconnected');
-    };
-  } catch (err) {
-    showError('Connection Error', err.message, null, () => resetTextSendState());
-  }
-};
-
-function handleTextSignalingMessage(msg) {
-  switch (msg.type) {
-    case 'receiver-joined': {
-      updateTextSendStatus(`Receiver connected! Sending text...`, 'success');
-      initiateTextPeerConnection(msg.receiverId);
-      break;
-    }
-    case 'answer':
-      handleTextReceiverAnswer(msg.from, msg.sdp);
-      break;
-
-    case 'ice':
-      handleTextSenderIce(msg.from, msg.candidate);
-      break;
-
-    case 'receiver-left':
-      cleanupTextPeer(msg.receiverId);
-      break;
-
-    case 'error':
-      showError('Signaling Error', msg.message, null, () => resetTextSendState());
-      break;
-  }
-}
-
-async function initiateTextPeerConnection(receiverId) {
-  const iceConfig = CONFIG.SIGNALING_URL ? { iceServers: CONFIG.ICE_SERVERS } : { iceServers: [] };
-  const pc = new RTCPeerConnection(iceConfig);
-  const channel = pc.createDataChannel('textTransfer', { ordered: true });
-  channel.binaryType = 'arraybuffer';
-
-  textSendState.peers[receiverId] = { pc, channel };
-
-  pc.onicecandidate = (e) => {
-    if (e.candidate && textSendState.ws && textSendState.ws.readyState === WebSocket.OPEN) {
-      textSendState.ws.send(JSON.stringify({
-        type: 'ice',
-        code: textSendState.roomCode,
-        from: 'sender',
-        to: receiverId,
-        candidate: e.candidate,
-      }));
-    }
-  };
-
-  pc.onconnectionstatechange = () => {
-    if (pc.connectionState === 'failed') {
-      showError('Connection Failed', 'WebRTC connection to receiver failed.', null, () => resetTextSendState());
-    }
-  };
-
-  channel.onopen = () => {
-    // Send text as a single message
-    channel.send(JSON.stringify({
-      type: 'text-data',
-      text: textSendState.text,
-    }));
-
-    // Show completion
-    updateTextSendStatus('Text sent successfully!', 'success');
-    setTimeout(() => {
-      $('text-step-waiting').classList.add('hidden');
-      $('text-step-done').classList.remove('hidden');
-      const textLen = textSendState.text.length;
-      $('done-text-details').textContent = `${textLen.toLocaleString()} characters sent successfully.`;
-    }, 500);
-  };
-
-  channel.onerror = (e) => {
-    console.warn('Text DataChannel error:', e);
-  };
-
-  // Create and send offer
-  const offer = await pc.createOffer();
-  await pc.setLocalDescription(offer);
-
-  textSendState.ws.send(JSON.stringify({
-    type: 'offer',
-    code: textSendState.roomCode,
-    receiverId,
-    sdp: { type: offer.type, sdp: offer.sdp },
-  }));
-}
-
-async function handleTextReceiverAnswer(receiverId, sdp) {
-  const peer = textSendState.peers[receiverId];
-  if (!peer) return;
-  await peer.pc.setRemoteDescription(new RTCSessionDescription({ type: sdp.type, sdp: sdp.sdp }));
-  if (peer._iceQueue) {
-    for (const c of peer._iceQueue) {
-      try { await peer.pc.addIceCandidate(new RTCIceCandidate(c)); } catch (e) { console.warn(e); }
-    }
-    peer._iceQueue = [];
-  }
-}
-
-async function handleTextSenderIce(from, candidate) {
-  const peer = textSendState.peers[from];
-  if (!peer) return;
-  if (peer.pc.remoteDescription) {
-    try { await peer.pc.addIceCandidate(new RTCIceCandidate(candidate)); } catch (e) { console.warn(e); }
-  } else {
-    if (!peer._iceQueue) peer._iceQueue = [];
-    peer._iceQueue.push(candidate);
-  }
-}
-
-function cleanupTextPeer(receiverId) {
-  const peer = textSendState.peers[receiverId];
-  if (peer) {
-    try { peer.channel.close(); } catch (_) { }
-    try { peer.pc.close(); } catch (_) { }
-    delete textSendState.peers[receiverId];
-  }
-}
-
-function updateTextSendStatus(msg, variant) {
-  const el = $('text-send-status');
-  el.className = `status-badge status-${variant}`;
-  el.querySelector('span').textContent = msg;
-}
-
-$('copy-text-code').onclick = () => {
-  const code = $('text-room-code').textContent;
-  navigator.clipboard.writeText(code).then(() => {
-    const btn = $('copy-text-code');
-    btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#00C896" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>';
-    setTimeout(() => {
-      btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
-    }, 2000);
-  });
-};
-
-$('btn-cancel-text-send').onclick = () => {
-  textSendState.cancelled = true;
-  resetTextSendState();
-};
-
-$('btn-send-another-text').onclick = () => resetTextSendState();
-
-function resetTextSendState() {
-  if (textSendState.ws) {
-    try { textSendState.ws.close(); } catch (_) { }
-    textSendState.ws = null;
-  }
-  for (const id of Object.keys(textSendState.peers)) {
-    cleanupTextPeer(id);
-  }
-  textSendState.text = '';
-  textSendState.roomCode = null;
-  textSendState.cancelled = false;
-
-  // Reset UI
-  $('text-step-input').classList.remove('hidden');
-  $('text-step-waiting').classList.add('hidden');
-  $('text-step-done').classList.add('hidden');
-  $('text-content').value = '';
-  $('char-count').textContent = '0 characters';
-  $('btn-create-text-room').disabled = true;
-  setConnDot($('text-conn-dot'), 'disconnected');
-
-  showScreen('home');
-}
+// Auto-uppercase room code input
+$('code-input').addEventListener('input', (e) => {
+  e.target.value = e.target.value.toUpperCase();
+});
