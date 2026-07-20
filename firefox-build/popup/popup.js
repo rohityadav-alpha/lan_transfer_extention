@@ -246,7 +246,15 @@ const fileInput = $('file-input');
 dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('dragover'); });
 dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
 dropZone.addEventListener('drop', (e) => { e.preventDefault(); dropZone.classList.remove('dragover'); handleFileSelect(e.dataTransfer.files[0]); });
-fileInput.onchange = () => handleFileSelect(fileInput.files[0]);
+
+// Reset value on every click so re-selecting the same file triggers change event
+fileInput.addEventListener('click', () => { fileInput.value = ''; });
+// Use addEventListener instead of onchange for better mobile browser support
+fileInput.addEventListener('change', () => {
+  if (fileInput.files && fileInput.files[0]) {
+    handleFileSelect(fileInput.files[0]);
+  }
+});
 
 function handleFileSelect(file) {
   if (!file) return;
