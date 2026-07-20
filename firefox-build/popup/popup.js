@@ -247,9 +247,7 @@ dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.clas
 dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
 dropZone.addEventListener('drop', (e) => { e.preventDefault(); dropZone.classList.remove('dragover'); handleFileSelect(e.dataTransfer.files[0]); });
 
-// Reset value on every click so re-selecting the same file triggers change event
-fileInput.addEventListener('click', () => { fileInput.value = ''; });
-// Use addEventListener instead of onchange for better mobile browser support
+// Use addEventListener for better mobile browser support
 fileInput.addEventListener('change', () => {
   if (fileInput.files && fileInput.files[0]) {
     handleFileSelect(fileInput.files[0]);
@@ -259,6 +257,11 @@ fileInput.addEventListener('change', () => {
 function handleFileSelect(file) {
   if (!file) return;
   sendState.file = file;
+  // Reset input value AFTER capturing file reference,
+  // so re-selecting the same file triggers change event again.
+  // Must be done here, NOT in click handler — resetting on click
+  // interferes with mobile file picker and causes lost selections.
+  try { fileInput.value = ''; } catch (_) {}
   $('file-name').textContent = file.name;
   $('file-size').textContent = formatSize(file.size);
   $('file-info').classList.remove('hidden');
