@@ -4,6 +4,14 @@
    Optimized for Chrome Extension Side Panel (380×600)
    ═══════════════════════════════════════════════════════ */
 
+/* ─── SVG Gradient Stops ─────────────────────────────── */
+.gradient-stop-start {
+  stop-color: #6C63FF;
+}
+.gradient-stop-end {
+  stop-color: #00C896;
+}
+
 /* ─── Reset & Base ──────────────────────────────────── */
 *,
 *::before,
