@@ -17,10 +17,14 @@ const CONFIG = {
 
   // ICE servers for NAT traversal (STUN discovers public IP, TURN relays when direct fails)
   ICE_SERVERS: [
+    // STUN servers (free, discovers public IP)
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
     { urls: 'stun:stun2.l.google.com:19302' },
+    { urls: 'stun:stun3.l.google.com:19302' },
+    { urls: 'stun:stun4.l.google.com:19302' },
     { urls: 'stun:stun.relay.metered.ca:80' },
+    // TURN servers — Metered.ca
     {
       urls: 'turn:global.relay.metered.ca:80',
       username: 'e8dd65c5d2bc1e5fc9cbf131',
@@ -40,6 +44,22 @@ const CONFIG = {
       urls: 'turns:global.relay.metered.ca:443?transport=tcp',
       username: 'e8dd65c5d2bc1e5fc9cbf131',
       credential: '4/sYLzOBz++pAALg'
+    },
+    // TURN fallback — OpenRelay (free public TURN)
+    {
+      urls: 'turn:openrelay.metered.ca:80',
+      username: 'openrelayproject',
+      credential: 'openrelayproject'
+    },
+    {
+      urls: 'turn:openrelay.metered.ca:443',
+      username: 'openrelayproject',
+      credential: 'openrelayproject'
+    },
+    {
+      urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+      username: 'openrelayproject',
+      credential: 'openrelayproject'
     }
   ]
 };
@@ -361,13 +381,15 @@ function handleSenderMessage(msg) {
 }
 
 async function initiatePeerConnection(receiverId) {
-  const iceConfig = CONFIG.SIGNALING_URL ? { iceServers: CONFIG.ICE_SERVERS } : { iceServers: [] };
+  const iceConfig = CONFIG.SIGNALING_URL
+    ? { iceServers: CONFIG.ICE_SERVERS, iceTransportPolicy: 'all' }
+    : { iceServers: [] };
   const pc = new RTCPeerConnection(iceConfig);
   const channel = pc.createDataChannel('fileTransfer', { ordered: true });
   channel.binaryType = 'arraybuffer';
   channel.bufferedAmountLowThreshold = BUFFER_LOW;
 
-  sendState.peers[receiverId] = { pc, channel };
+  sendState.peers[receiverId] = { pc, channel, iceRestartAttempted: false };
 
   pc.onicecandidate = (e) => {
     if (e.candidate && sendState.ws && sendState.ws.readyState === WebSocket.OPEN) {
@@ -384,12 +406,29 @@ async function initiatePeerConnection(receiverId) {
   pc.onconnectionstatechange = () => {
     console.log('[WebRTC Sender] Connection state:', pc.connectionState);
     if (pc.connectionState === 'failed') {
-      showError('Connection Failed', 'WebRTC connection to receiver failed.', null, () => resetSendState());
+      const peer = sendState.peers[receiverId];
+      if (peer && !peer.iceRestartAttempted) {
+        // Try ICE restart once before giving up
+        console.log('[WebRTC Sender] Attempting ICE restart...');
+        peer.iceRestartAttempted = true;
+        pc.restartIce();
+      } else {
+        showError('Connection Failed', 'WebRTC connection to receiver failed. Make sure both devices are on the same network or try again.', null, () => resetSendState());
+      }
     }
   };
 
   pc.oniceconnectionstatechange = () => {
     console.log('[WebRTC Sender] ICE state:', pc.iceConnectionState);
+    if (pc.iceConnectionState === 'disconnected') {
+      // Give it a few seconds to recover before treating as failure
+      setTimeout(() => {
+        if (pc.iceConnectionState === 'disconnected') {
+          console.log('[WebRTC Sender] ICE still disconnected, attempting restart...');
+          pc.restartIce();
+        }
+      }, 3000);
+    }
   };
 
   pc.onicegatheringstatechange = () => {
@@ -716,10 +755,13 @@ function handleReceiverMessage(msg, code, senderIp) {
 }
 
 async function handleOffer(sdp, code) {
-  const iceConfig = CONFIG.SIGNALING_URL ? { iceServers: CONFIG.ICE_SERVERS } : { iceServers: [] };
+  const iceConfig = CONFIG.SIGNALING_URL
+    ? { iceServers: CONFIG.ICE_SERVERS, iceTransportPolicy: 'all' }
+    : { iceServers: [] };
   const pc = new RTCPeerConnection(iceConfig);
   recvState.pc = pc;
   recvState._iceQueue = [];
+  recvState._iceRestartAttempted = false;
 
   pc.onicecandidate = (e) => {
     if (e.candidate && recvState.ws && recvState.ws.readyState === WebSocket.OPEN) {
@@ -749,15 +791,25 @@ async function handleOffer(sdp, code) {
   pc.onconnectionstatechange = () => {
     console.log('[WebRTC] Connection state:', pc.connectionState);
     if (pc.connectionState === 'failed') {
-      showError('Connection Failed', 'WebRTC connection failed.', null, () => resetReceiveState());
+      if (!recvState._iceRestartAttempted) {
+        console.log('[WebRTC Receiver] Attempting ICE restart...');
+        recvState._iceRestartAttempted = true;
+        pc.restartIce();
+      } else {
+        showError('Connection Failed', 'WebRTC connection failed. Make sure both devices are on the same network or try again.', null, () => resetReceiveState());
+      }
     }
   };
 
   pc.oniceconnectionstatechange = () => {
     console.log('[WebRTC] ICE connection state:', pc.iceConnectionState);
-    if (pc.iceConnectionState === 'failed') {
-      // Try ICE restart before giving up
-      console.warn('[WebRTC] ICE failed, connection may not establish');
+    if (pc.iceConnectionState === 'disconnected') {
+      setTimeout(() => {
+        if (pc.iceConnectionState === 'disconnected') {
+          console.log('[WebRTC Receiver] ICE still disconnected, attempting restart...');
+          pc.restartIce();
+        }
+      }, 3000);
     }
   };
 
