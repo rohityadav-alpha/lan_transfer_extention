@@ -236,18 +236,17 @@ function updateSendButtonState() {
   $('btn-create-room').disabled = !(hasFile || hasText);
 }
 
-// File selection
+// File selection — the <label for="file-input"> in HTML activates the
+// native file picker on tap/click across all platforms including Firefox Mobile.
 const dropZone = $('drop-zone');
 const fileInput = $('file-input');
 
-// On desktop, clicking the overlay input opens file picker directly.
-// On mobile, tapping the overlay input opens file picker natively.
-// No need for dropZone.onclick = () => fileInput.click() anymore.
+// Desktop drag-and-drop support
 dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('dragover'); });
 dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
 dropZone.addEventListener('drop', (e) => { e.preventDefault(); dropZone.classList.remove('dragover'); handleFileSelect(e.dataTransfer.files[0]); });
 
-// Use addEventListener for better mobile browser support
+// File input change fires when user picks a file (via label tap or drag-and-drop)
 fileInput.addEventListener('change', () => {
   if (fileInput.files && fileInput.files[0]) {
     handleFileSelect(fileInput.files[0]);
@@ -257,11 +256,8 @@ fileInput.addEventListener('change', () => {
 function handleFileSelect(file) {
   if (!file) return;
   sendState.file = file;
-  // Reset input value AFTER capturing file reference,
-  // so re-selecting the same file triggers change event again.
-  // Must be done here, NOT in click handler — resetting on click
-  // interferes with mobile file picker and causes lost selections.
-  try { fileInput.value = ''; } catch (_) {}
+  // DO NOT reset fileInput.value here — Firefox Mobile (Gecko) invalidates
+  // the File blob handle when value is cleared, causing lost selections.
   $('file-name').textContent = file.name;
   $('file-size').textContent = formatSize(file.size);
   $('file-info').classList.remove('hidden');
@@ -270,11 +266,12 @@ function handleFileSelect(file) {
 }
 
 $('file-remove').onclick = (e) => {
+  e.preventDefault();   // Prevent <label> from re-opening file picker
   e.stopPropagation();
   sendState.file = null;
   $('file-info').classList.add('hidden');
   $('drop-label').textContent = 'Tap or drag a file here';
-  fileInput.value = '';
+  fileInput.value = '';  // Safe here — we WANT to clear the selection
   updateSendButtonState();
 };
 

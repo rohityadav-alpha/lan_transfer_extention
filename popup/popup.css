@@ -356,19 +356,17 @@ h1 {
   color: var(--text-muted);
 }
 
-/* File input overlay — covers entire drop zone for mobile tap support */
-.file-input-overlay {
+/* Hidden file input — the <label for="file-input"> activates it natively on all platforms */
+.hidden-file-input {
   position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  opacity: 0;
-  cursor: pointer;
-  z-index: 2;
-  /* Ensure it works on iOS Safari */
-  -webkit-appearance: none;
-  font-size: 0;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 /* ─── File Info Bar ─────────────────────────────────── */
